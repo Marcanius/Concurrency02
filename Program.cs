@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace RushHourSolver
 {
@@ -45,29 +47,43 @@ namespace RushHourSolver
             {
                 Tuple<byte[], Solution> currentState = q.Dequeue();
 
-                // Generate sucessors, and push them on to the queue if they haven't been seen before
-                foreach ( Tuple<byte[], Solution> next in Sucessors( currentState ) )
-                {
-                    // Did we reach the goal?
-                    if ( next.Item1[ targetVehicle ] == goal )
+                // Generate Successors, and push them on to the queue if they haven't been seen before
+                Parallel.ForEach<Tuple<byte[], Solution>>( Successors( currentState ),
+                    ( next ) =>
                     {
-                        q.Clear();
-                        foundSolution = next.Item2;
-                        break;
-                    }
+                        // Did we reach the goal?
+                        if ( next.Item1[ targetVehicle ] == goal )
+                        {
+                            q.Clear();
+                            foundSolution = next.Item2;
+                            break;
+                        }
 
-                    // If we haven't seen this node before, add it to the Trie and Queue to be expanded
-                    if ( !AddNode( next.Item1 ) )
-                        q.Enqueue( next );
-                }
+                        // If we haven't seen this node before, add it to the Trie and Queue to be expanded
+                        if ( !AddNode( next.Item1 ) )
+                            q.Enqueue( next );
+                    } );
+                //foreach ( Tuple<byte[], Solution> next in Successors( currentState ) )
+                //{
+                //    // Did we reach the goal?
+                //    if ( next.Item1[ targetVehicle ] == goal )
+                //    {
+                //        q.Clear();
+                //        foundSolution = next.Item2;
+                //        break;
+                //    }
+
+                //    // If we haven't seen this node before, add it to the Trie and Queue to be expanded
+                //    if ( !AddNode( next.Item1 ) )
+                //        q.Enqueue( next );
+                //}
             }
-
             Console.WriteLine( foundSolution );
             Console.ReadLine();
         }
 
-        // Generates the sucessors of a state
-        private static IEnumerable<Tuple<byte[], Solution>> Sucessors( Tuple<byte[], Solution> state )
+        // Generates the Successors of a state
+        private static IEnumerable<Tuple<byte[], Solution>> Successors( Tuple<byte[], Solution> state )
         {
             byte[] currentState = state.Item1;
             Solution solution = state.Item2;
