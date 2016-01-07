@@ -25,7 +25,6 @@ namespace RushHourSolver
 
         static Solution foundSolution; // If a solution is found, it is stored here
         static object solutionFoundLock; // A lock, so two threads don't write to the foundSolution at the same time.
-        static bool solutionFound;
         static bool solveMode; // Stores what kind of output we want
 
         // Main entry point for the program
@@ -36,7 +35,7 @@ namespace RushHourSolver
 
             // Initialize empty queue
             ConcurrentQueue<Tuple<byte[], Solution>> q = new ConcurrentQueue<Tuple<byte[], Solution>>();
-
+            ConcurrentQueue<Tuple<byte[], Solution>> nextQueue;
             // By default, the solution is "no solution"
             foundSolution = new NoSolution();
             solutionFoundLock = new object();
@@ -56,7 +55,7 @@ namespace RushHourSolver
                     break;
 
                 // We have not found the solution, so add all successors to the next layer's queue.
-                ConcurrentQueue<Tuple<byte[], Solution>> nextQueue = new ConcurrentQueue<Tuple<byte[], Solution>>();
+                nextQueue = new ConcurrentQueue<Tuple<byte[], Solution>>();
 
                 Parallel.ForEach<Tuple<byte[], Solution>>(
                     q,
