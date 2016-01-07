@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -24,6 +24,8 @@ namespace RushHourSolver
         static Trie visited; // A Trie data structure that keeps track of visited positions
 
         static Solution foundSolution; // If a solution is found, it is stored here
+        static object solutionFoundLock; // A lock, so two threads don't write to the foundSolution at the same time.
+        static bool solutionFound;
         static bool solveMode; // Stores what kind of output we want
 
         // Main entry point for the program
@@ -33,51 +35,39 @@ namespace RushHourSolver
             ReadInput();
 
             // Initialize empty queue
-            Queue<Tuple<byte[], Solution>> q = new Queue<Tuple<byte[], Solution>>();
+            ConcurrentQueue<Tuple<byte[], Solution>> q = new ConcurrentQueue<Tuple<byte[], Solution>>();
 
             // By default, the solution is "no solution"
             foundSolution = new NoSolution();
+            solutionFoundLock = new object();
 
             // Place the starting position in the queue
             q.Enqueue( Tuple.Create( vehicleStartPos, (Solution)new EmptySolution() ) );
             AddNode( vehicleStartPos );
 
             // Do BFS
-            while ( q.Count > 0 )
+            while ( !q.IsEmpty )
             {
-                Tuple<byte[], Solution> currentState = q.Dequeue();
+                // First we check if there is a correct solution in the queue.
+                Parallel.ForEach<Tuple<byte[], Solution>>( q, CheckNodeForSolution );
 
-                // Generate Successors, and push them on to the queue if they haven't been seen before
-                Parallel.ForEach<Tuple<byte[], Solution>>( Successors( currentState ),
-                    ( next ) =>
-                    {
-                        // Did we reach the goal?
-                        if ( next.Item1[ targetVehicle ] == goal )
-                        {
-                            q.Clear();
-                            foundSolution = next.Item2;
-                            break;
-                        }
+                // If the solution was found, we are finished.
+                if ( !(foundSolution is NoSolution) )
+                    break;
 
-                        // If we haven't seen this node before, add it to the Trie and Queue to be expanded
-                        if ( !AddNode( next.Item1 ) )
-                            q.Enqueue( next );
-                    } );
-                //foreach ( Tuple<byte[], Solution> next in Successors( currentState ) )
-                //{
-                //    // Did we reach the goal?
-                //    if ( next.Item1[ targetVehicle ] == goal )
-                //    {
-                //        q.Clear();
-                //        foundSolution = next.Item2;
-                //        break;
-                //    }
+                // We have not found the solution, so add all successors to the next layer's queue.
+                ConcurrentQueue<Tuple<byte[], Solution>> nextQueue = new ConcurrentQueue<Tuple<byte[], Solution>>();
 
-                //    // If we haven't seen this node before, add it to the Trie and Queue to be expanded
-                //    if ( !AddNode( next.Item1 ) )
-                //        q.Enqueue( next );
-                //}
+                Parallel.ForEach<Tuple<byte[], Solution>>(
+                    q,
+                    delegate ( Tuple<byte[], Solution> node )
+                        { AddSuccs( node, ref nextQueue ); }
+                    );
+
+                // The next queue is now the current queue.
+                q = nextQueue;
             }
+
             Console.WriteLine( foundSolution );
             Console.ReadLine();
         }
@@ -284,6 +274,20 @@ namespace RushHourSolver
             Array.Copy( array, newArray, array.Length );
             newArray[ array.Length ] = i;
             return newArray;
+        }
+
+        // Checks if a node is a solution.
+        static void CheckNodeForSolution( Tuple<byte[], Solution> node )
+        {
+            if ( node.Item1[ targetVehicle ] == goal )
+                lock ( solutionFoundLock )
+                    foundSolution = node.Item2;
+        }
+
+        // Adds all successors of one node to the provided queue.
+        static void AddSuccs( Tuple<byte[], Solution> node, ref ConcurrentQueue<Tuple<byte[], Solution>> cq )
+        {
+            Parallel.ForEach<Tuple<byte[], Solution>>( Successors( node ), cq.Enqueue );
         }
 
         // Checks if node is already present in visited and adds node to visited if it is not. Returns boolean true/false indicating if it was already present
